@@ -1,0 +1,27 @@
+{
+  "zone1": {
+    "enabled": true,
+    "temp_min_c": 18.0,
+    "temp_max_c": 28.0,
+    "humidity_min_pct": 45.0,
+    "humidity_max_pct": 80.0,
+    "email_enabled": true,
+    "email_to": "holder@gmail.com",
+    "email_recipients": [
+      "holder@gmail.com"
+      
+    ],
+    "email_cooldown_minutes": 30
+  },
+  "zone2": {
+    "enabled": true,
+    "temp_min_c": 18.0,
+    "temp_max_c": 28.0,
+    "humidity_min_pct": 45.0,
+    "humidity_max_pct": 80.0,
+    "email_enabled": false,
+    "email_to": "",
+    "email_recipients": [],
+    "email_cooldown_minutes": 30
+  }
+}

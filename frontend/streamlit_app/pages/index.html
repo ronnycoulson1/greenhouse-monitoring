@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenhouse Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Earthy Horticulture Theme */
+        body {
+            background-color: #2A2723;
+            color: #FDFCDC;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Fixed Left Sidebar */
+        .sidebar {
+            width: 260px;
+            background-color: #1f1c19;
+            padding: 30px 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .sidebar h2 { color: #DDA15E; margin-bottom: 40px; font-size: 24px;}
+        .nav-item { padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; font-weight: 600; color: #C6C5B3;}
+        .nav-active { background-color: #38332D; color: #FDFCDC; border-left: 4px solid #81B29A; }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .header-title { display: flex; align-items: center; gap: 15px; margin-bottom: 30px; }
+        .header-title h1 { margin: 0; font-size: 32px; font-weight: 400; }
+        .status-badge { background: #81B29A; color: #1f1c19; padding: 5px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+
+        /* Metric Cards Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: linear-gradient(145deg, #38332D, #2D2925);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border-bottom: 4px solid #81B29A;
+            transition: transform 0.2s;
+        }
+
+        .card:hover { transform: translateY(-3px); }
+        .card-temp { border-bottom-color: #E07A5F; } /* Terra Cotta */
+        .card-hum { border-bottom-color: #81B29A; }  /* Sage Green */
+        .card-soil { border-bottom-color: #9C6644; } /* Rich Soil */
+        .card-weather { border-bottom-color: #F2CC8F; } /* Sunlight */
+
+        .card-title { font-size: 16px; color: #C6C5B3; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        .card-value { font-size: 42px; font-weight: bold; }
+
+        /* Chart Container */
+        .chart-container {
+            background: #1f1c19;
+            padding: 25px;
+            border-radius: 16px;
+            height: 400px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>Kent State<br>Greenhouse</h2>
+        <div class="nav-item nav-active">🌱 Zone 1: Upper</div>
+        <div class="nav-item">🌿 Zone 1: Middle</div>
+        <div class="nav-item">🪴 Zone 1: Ground</div>
+        <div class="nav-item" style="margin-top: 40px;">⚙️ System Control</div>
+    </div>
+
+    <div class="main-content">
+        <div class="header-title">
+            <h1>Zone 1 Environment</h1>
+            <span class="status-badge" id="conn-status">🟢 Live</span>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="card card-temp">
+                <div class="card-title">Temperature</div>
+                <div class="card-value" id="val-temp">--°C</div>
+            </div>
+            <div class="card card-hum">
+                <div class="card-title">Humidity</div>
+                <div class="card-value" id="val-hum">--%</div>
+            </div>
+            <div class="card card-soil">
+                <div class="card-title">Soil Moisture</div>
+                <div class="card-value">5.5%</div>
+            </div>
+            <div class="card card-weather">
+                <div class="card-title">External Weather</div>
+                <div class="card-value" id="val-weather" style="font-size: 28px;">--</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="liveChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // --- Chart.js Setup ---
+        const ctx = document.getElementById('liveChart').getContext('2d');
+        const liveChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamps go here
+                datasets: [
+                    {
+                        label: 'Temperature (°C)',
+                        borderColor: '#E07A5F', // Terra Cotta
+                        backgroundColor: 'rgba(224, 122, 95, 0.1)',
+                        data: [],
+                        yAxisID: 'y',
+                        fill: true,
+                        tension: 0.4 // Smooth curves
+                    },
+                    {
+                        label: 'Humidity (%)',
+                        borderColor: '#81B29A', // Sage Green
+                        borderDash: [5, 5],
+                        data: [],
+                        yAxisID: 'y1',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                color: '#C6C5B3',
+                scales: {
+                    x: { ticks: { color: '#C6C5B3' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { type: 'linear', display: true, position: 'left', ticks: { color: '#E07A5F' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y1: { type: 'linear', display: true, position: 'right', ticks: { color: '#81B29A' }, grid: { drawOnChartArea: false } }
+                },
+                plugins: { legend: { labels: { color: '#FDFCDC' } } }
+            }
+        });
+
+        // --- Live Data Fetching ---
+        async function fetchLatestData() {
+            try {
+                const response = await fetch('/api/latest');
+                if (!response.ok) throw new Error('Network response was not ok');
+                
+                const data = await response.json();
+                
+                // Update Metric Cards
+                if(data.temp_c) document.getElementById('val-temp').innerText = data.temp_c.toFixed(1) + '°C';
+                if(data.humidity_pct) document.getElementById('val-hum').innerText = data.humidity_pct.toFixed(0) + '%';
+                if(data.weather_desc) document.getElementById('val-weather').innerText = data.weather_desc;
+
+                // Update Chart (Keep last 15 points)
+                const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                
+                if (liveChart.data.labels.length > 15) {
+                    liveChart.data.labels.shift();
+                    liveChart.data.datasets[0].data.shift();
+                    liveChart.data.datasets[1].data.shift();
+                }
+
+                liveChart.data.labels.push(timeString);
+                liveChart.data.datasets[0].data.push(data.temp_c);
+                liveChart.data.datasets[1].data.push(data.humidity_pct);
+                liveChart.update();
+
+                document.getElementById('conn-status').innerText = '🟢 Live';
+                document.getElementById('conn-status').style.background = '#81B29A';
+
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                document.getElementById('conn-status').innerText = '🔴 Disconnected';
+                document.getElementById('conn-status').style.background = '#E07A5F';
+            }
+        }
+        
+        // Fetch immediately, then every 10 seconds
+        fetchLatestData();
+        setInterval(fetchLatestData, 10000);
+    </script>
+</body>
+</html>

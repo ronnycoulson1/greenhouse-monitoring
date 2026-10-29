@@ -1,0 +1,63 @@
+# =====================
+# Secrets / environment
+# =====================
+.env
+.env.*
+backend/env
+
+# =====================
+# Virtual environments
+# =====================
+venv/
+.venv/
+.env_venv/
+
+# =====================
+# Python cache / build
+# =====================
+__pycache__/
+*.py[cod]
+
+# =====================
+# Databases & App Caches
+# =====================
+*.sqlite
+backend/.cache.sqlite
+.cache/
+.streamlit/
+
+# =====================
+# IDE / editor files
+# =====================
+.idea/
+.vscode/
+
+# =====================
+# OS / system files
+# =====================
+.DS_Store
+Thumbs.db
+
+
+
+# =====================
+# Temp / backup files
+# =====================
+*.save
+gitignore.save
+
+
+
+
+
+
+
+
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+seed_local.py
+.DS_Store
+.github/workflows/greenhouseWF.yml
