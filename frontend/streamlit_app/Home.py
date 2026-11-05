@@ -45,12 +45,43 @@ def _to_local_time(series: pd.Series) -> pd.Series:
     return timestamps.dt.tz_convert("US/Eastern")
 
 
+STALE_AFTER = pd.Timedelta(minutes=30)
+
+
+def _age(latest: dict | None):
+    ts = latest.get("ts") if latest else None
+    if ts is None:
+        return None
+    ts = pd.Timestamp(ts)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return pd.Timestamp.now(tz="UTC") - ts
+
+
+def _age_text(age) -> str:
+    if age is None:
+        return ""
+    mins = int(age.total_seconds() // 60)
+    if mins < 1:
+        return "just now"
+    if mins < 60:
+        return f"{mins} min ago"
+    hours = mins // 60
+    if hours < 48:
+        return f"{hours} h ago"
+    return f"{hours // 24} days ago"
+
+
 def _alert_state_for_area(area: dict, latest: dict | None) -> tuple[str, str]:
     if not latest:
         return "neutral", "Waiting for data"
 
-    if area["schema"] == "pico":
-        return "neutral", "Outside reference"
+    if area["key"] == "outside":
+        return "neutral", "Reference"
+
+    age = _age(latest)
+    if age is not None and age > STALE_AFTER:
+        return "neutral", "No recent data"
 
     temp_alert = evaluate_temperature_alert(latest.get("temp_c"), zone="zone1")
     humidity_alert = evaluate_humidity_alert(latest.get("humidity_pct"), zone="zone1")
@@ -65,7 +96,6 @@ def _alert_state_for_area(area: dict, latest: dict | None) -> tuple[str, str]:
         return "warn", "Humidity low"
 
     return "good", "Within target"
-
 
 def _plot_card_start():
     st.markdown('<div class="plot-card">', unsafe_allow_html=True)
@@ -178,6 +208,8 @@ for area in ZONE1_AREAS:
 
     if area["schema"] == "weather" and latest and latest.get("weather_desc"):
         detail = f"{detail} | {str(latest['weather_desc']).title()}"
+    if latest:
+        detail = f"{detail} · updated {_age_text(_age(latest))}"
 
     status_items.append(
         {
@@ -193,60 +225,50 @@ render_status_panel(status_items)
 render_section_header("Recent Climate Trend", icon=TREND_ICON)
 history_cols = st.columns(2)
 
-outside_history = load_history("outside_weather_data", "pico", hours=24)
+TREND_COLORS = ["#2E7D4F", "#C98A2B", "#7A5AA6", "#4C83C3"]
+histories = []
+for i, area in enumerate(ZONE1_AREAS):
+    df = load_history(area["collection"], area["schema"], hours=24)
+    if not df.empty and "ts" in df.columns:
+        df["ts"] = _to_local_time(df["ts"])
+        histories.append((area, df, TREND_COLORS[i % len(TREND_COLORS)]))
 
-if not outside_history.empty and "ts" in outside_history.columns:
-    outside_history["ts"] = _to_local_time(outside_history["ts"])
 
-_has_temp = not outside_history.empty and "temp_c" in outside_history.columns
-_has_humidity = not outside_history.empty and "humidity_pct" in outside_history.columns
+def _render_trend(field: str, title: str, unit: str, empty_msg: str):
+    _plot_card_start()
+    st.markdown(f"**{title}**")
+    traces = [(a, df, c) for a, df, c in histories if field in df.columns]
+    if not traces:
+        st.info(empty_msg)
+        _plot_card_end()
+        return
+    fig = go.Figure()
+    for area, df, color in traces:
+        is_outside = area["key"] == "outside"
+        fig.add_trace(
+            go.Scatter(
+                x=df["ts"],
+                y=df[field],
+                mode="lines",
+                name=area["label"],
+                line=dict(color=color, width=2, dash="dash" if is_outside else "solid"),
+            )
+        )
+    apply_readable_layout(
+        fig,
+        margin=dict(l=8, r=8, t=16, b=72),
+        yaxis=chart_axis(title=unit, showgrid=True, gridcolor="rgba(99, 116, 106, 0.18)"),
+        xaxis=chart_axis(showgrid=False, tickformat="%b %d\n%I:%M %p"),
+    )
+    fig.update_layout(showlegend=True, legend=dict(orientation="h", y=-0.3))
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, theme=None)
+    _plot_card_end()
+
 
 with history_cols[0]:
-    _plot_card_start()
-    st.markdown("**Temperature, last 24 hours**")
-    if _has_temp:
-        temp_fig = go.Figure()
-        temp_fig.add_trace(
-            go.Scatter(
-                x=outside_history["ts"],
-                y=outside_history["temp_c"],
-                mode="lines",
-                name="Outside",
-                line=dict(color="#4C83C3", width=2),
-            )
-        )
-        apply_readable_layout(
-            temp_fig,
-            margin=dict(l=8, r=8, t=16, b=48),
-            yaxis=chart_axis(title=CELSIUS_UNIT, showgrid=True, gridcolor="rgba(99, 116, 106, 0.18)"),
-            xaxis=chart_axis(showgrid=False, tickformat="%b %d\n%I:%M %p"),
-        )
-        st.plotly_chart(temp_fig, use_container_width=True, config={"displayModeBar": False}, theme=None)
-    else:
-        st.info("Outside temperature history will appear here once data has been received.")
-    _plot_card_end()
+    _render_trend("temp_c", "Temperature, last 24 hours", CELSIUS_UNIT,
+                  "Temperature history will appear here once data has been received.")
 
 with history_cols[1]:
-    _plot_card_start()
-    st.markdown("**Humidity, last 24 hours**")
-    if _has_humidity:
-        humidity_fig = go.Figure()
-        humidity_fig.add_trace(
-            go.Scatter(
-                x=outside_history["ts"],
-                y=outside_history["humidity_pct"],
-                mode="lines",
-                name="Outside",
-                line=dict(color="#4C83C3", width=2),
-            )
-        )
-        apply_readable_layout(
-            humidity_fig,
-            margin=dict(l=8, r=8, t=16, b=48),
-            yaxis=chart_axis(title="% RH", showgrid=True, gridcolor="rgba(99, 116, 106, 0.18)"),
-            xaxis=chart_axis(showgrid=False, tickformat="%b %d\n%I:%M %p"),
-        )
-        st.plotly_chart(humidity_fig, use_container_width=True, config={"displayModeBar": False}, theme=None)
-    else:
-        st.info("Outside humidity history will appear here once data has been received.")
-    _plot_card_end()
+    _render_trend("humidity_pct", "Humidity, last 24 hours", "% RH",
+                  "Humidity history will appear here once data has been received.")
